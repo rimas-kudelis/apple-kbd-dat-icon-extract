@@ -11,57 +11,120 @@ import optparse
 import sys
 import os
 
+class DataRecognizer(object):
+    header = 'start'
+    footer = 'end'
 
-ICNS_HEADER = 'icns' #'\x69\x63\x6e\x73'
+    @classmethod
+    def isDataStart(cls, buf, pos):
+        raise NotImplemented
+
+    @classmethod
+    def findNextDataStart(cls, buf, pos):
+        raise NotImplemented
+
+    @classmethod
+    def findDataSize(cls, buf, pos):
+        raise NotImplemented
+
+    @classmethod
+    def findDataRange(cls, buf, pos):
+        raise NotImplemented
+
+    @classmethod
+    def findNextDataRange(cls, buf, pos):
+        raise NotImplemented
+
+
+
+class ICNSRecognizer(DataRecognizer):
+    header = 'icns'
+    footer = 'IEND\xae\x42\x60\x82'
+
+    @classmethod
+    def isDataStart(cls, buf, pos):
+        return buf.startswith(cls.header, pos)
+
+
+    @classmethod
+    def findNextDataStart(cls, buf, pos):
+        while pos < len(buf):
+            if cls.isDataStart(buf, pos):
+                return pos
+            pos += 1
+        return None
+
+
+    @classmethod
+    def findDataSize(cls, buf, pos):
+        origin = pos
+        assert cls.isDataStart(buf, origin)
+        pos += len(cls.header)
+        size = struct.unpack('>I', buf[pos:pos+4])[0]
+        assert origin + size < len(buf)
+        assert buf[origin + size - len(cls.footer):origin + size] == cls.footer
+        return size
+
+
+    @classmethod
+    def findDataRange(cls, buf, pos):
+        size = cls.findDataSize(buf, pos)
+        return (pos, size)
+
+
+    @classmethod
+    def findNextDataRange(cls, buf, pos):
+        origin = cls.findNextDataStart(buf, pos)
+        if origin is None:
+            return None
+        return cls.findDataRange(buf, origin)
+
+
+def writeBuffer(filename, buf):
+    with open(filename, 'wb') as f:
+        f.write(buf)
 
 
 # def bufferToHex(buffer):
 #     return ''.join('%02x ' % ord(b) for b in buffer)
 
 
-def findNextIcon(data, pos):
-    while pos < len(data):
-        if data[pos:pos + len(ICNS_HEADER)] == ICNS_HEADER:
-            pos += len(ICNS_HEADER)
+def extractData(buf):
+    origin = 0
+    pos = 0
+    results = []
+    while pos < len(buf):
+        r = ICNSRecognizer.findNextDataRange(buf, origin)
+        if r is None:
             break
-        pos += len(ICNS_HEADER)
-    return pos
+        (pos, size) = r
+        results.append(('UNKNOWN', buf[origin:pos]))
+        results.append(('ICNS', buf[pos:pos+size]))
+        origin = pos + size
+    if origin < len(buf):
+        results.append(('UNKNOWN', buf[origin:len(buf)]))
+    return results
 
 
-def readIconData(data, pos, length):
-    if pos + length >= len(data):
-        return None
-    return data[pos:pos + length]
+def writeAllData(items, outputDir):
+    total = len(items)
+    maxDigits = len(str(total))
+    filenameFormat = '{index:#0%d}-{type}.{ext}' % maxDigits
 
+    exts = {
+        'UNKNOWN': 'dat',
+        'ICNS': 'icns',
+    }
 
-def writeIcon(filename, iconData):
-    with open(filename, 'wb') as f:
-        f.write(ICNS_HEADER)
-        f.write(struct.pack('>I', len(iconData)))
-        f.write(iconData)
+    for index, (type, data) in enumerate(items):
+        filename = outputDir + '/' + filenameFormat.format(
+            index=index,
+            type=type,
+            ext=exts[type],
+        )
 
-
-def processIcons(data, outputDir):
-    if not os.path.exists(outputDir):
-        print "Output directory %s doesn't exist, please create it first" \
-                % outputDir
-        return 1
-
-    iconIndex = 1
-    pos = findNextIcon(data, 0)
-    while pos < len(data):
-        iconLen = struct.unpack('>I', data[pos:pos+4])[0]
-        pos += 4
-        iconData = readIconData(data, pos, iconLen)
-        assert iconLen == len(iconData)
-
-        filename = os.path.join(outputDir, 'icon%03d.icns' % iconIndex)
-        print "Writing icon file %s" % filename
-        writeIcon(filename, iconData)
-
-        iconIndex += 1
-        pos = findNextIcon(data, pos)
-    return 0
+        print('Writing %s ...' % filename)
+        writeBuffer(filename, data)
 
 
 def parseArgs():
@@ -93,14 +156,31 @@ def parseArgs():
     return opts
 
 
+def checkArgs(opts):
+    if not os.path.exists(opts.output):
+        print "Output directory %s doesn't exist, please create it first" \
+                % outputDir
+        return 1
+
+
 def main():
     opts = parseArgs()
+    error = checkArgs(opts)
+    if error:
+        return error
 
     print "Reading %s" % opts.filename
     data = None
     with open(opts.filename, "rb") as f:
         data = f.read()
-    return processIcons(data, outputDir=opts.output)
+
+    items = extractData(data)
+    if not items:
+        return 1
+
+    writeAllData(items, opts.output)
+    return 0
+    # return processIcons(data, outputDir=opts.output)
 
 
 if __name__ == "__main__":
