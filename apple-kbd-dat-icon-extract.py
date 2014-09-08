@@ -11,35 +11,12 @@ import optparse
 import sys
 import os
 
-prog = os.path.basename(sys.argv[0])
 
-DEFAULT_DATFILE = (
-    "/System/Library"
-    "/Keyboard Layouts/AppleKeyboardLayouts.bundle"
-    "/Contents/Resources"
-    "/AppleKeyboardLayouts-L.dat"
-)
-
-parser = optparse.OptionParser(
-    usage="Usage: %prog [options] DATFILE"
-)
-parser.add_option(
-    "-o", "--output", 
-    dest="output",
-    help="Output directory", 
-    metavar="OUTPUT"
-)
-
-(opts, args) = parser.parse_args()
-if not opts.output:
-    parser.error("Please specify output dir using `-o'")
+ICNS_HEADER = 'icns' #'\x69\x63\x6e\x73'
 
 
-ICNS_HEADER = '\x69\x63\x6e\x73'
-
-
-def bufferToHex(buffer):
-    return ''.join('%02x ' % ord(b) for b in buffer)
+# def bufferToHex(buffer):
+#     return ''.join('%02x ' % ord(b) for b in buffer)
 
 
 def findNextIcon(data, pos):
@@ -66,8 +43,8 @@ def writeIcon(filename, iconData):
 
 def processIcons(data, outputDir):
     if not os.path.exists(outputDir):
-        print "%s: Output directory %s doesn't exist, please create it first" \
-                % (prog, outputDir)
+        print "Output directory %s doesn't exist, please create it first" \
+                % outputDir
         return 1
 
     iconIndex = 1
@@ -78,25 +55,53 @@ def processIcons(data, outputDir):
         iconData = readIconData(data, pos, iconLen)
         assert iconLen == len(iconData)
 
-        filename = os.path.join(outputDir, 'icon%d.icns' % iconIndex)
-        print "%s: Writing icon file %s" % (prog, filename)
+        filename = os.path.join(outputDir, 'icon%03d.icns' % iconIndex)
+        print "Writing icon file %s" % filename
         writeIcon(filename, iconData)
 
         iconIndex += 1
         pos = findNextIcon(data, pos)
     return 0
 
-def main():
-    if not args:
-        filename = DEFAULT_DATFILE
-    else:
-        filename = args[0]
 
-    print "%s: Reading %s" % (prog, filename)
+def parseArgs():
+    prog = os.path.basename(sys.argv[0])
+
+    DEFAULT_DATFILE = (
+        "/System/Library"
+        "/Keyboard Layouts/AppleKeyboardLayouts.bundle"
+        "/Contents/Resources"
+        "/AppleKeyboardLayouts-L.dat"
+    )
+
+    parser = optparse.OptionParser(
+        usage="Usage: %prog [options] DATFILE"
+    )
+    parser.add_option(
+        "-o", "--output",
+        dest="output",
+        help="Output directory",
+        metavar="OUTPUT"
+    )
+
+    (opts, args) = parser.parse_args()
+    if not opts.output:
+        parser.error("Please specify output dir using `-o'")
+
+    opts.filename = args[0] if args else DEFAULT_DATFILE
+
+    return opts
+
+
+def main():
+    opts = parseArgs()
+
+    print "Reading %s" % opts.filename
     data = None
-    with open(filename, "rb") as f:
+    with open(opts.filename, "rb") as f:
         data = f.read()
     return processIcons(data, outputDir=opts.output)
+
 
 if __name__ == "__main__":
     sys.exit(main())
