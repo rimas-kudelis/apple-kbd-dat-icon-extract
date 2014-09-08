@@ -13,11 +13,22 @@ import os
 
 prog = os.path.basename(sys.argv[0])
 
-DEFAULT_DATFILE = "/System/Library/Keyboard Layouts/AppleKeyboardLayouts.bundle/Contents/Resources/AppleKeyboardLayouts-L.dat"
+DEFAULT_DATFILE = (
+    "/System/Library"
+    "/Keyboard Layouts/AppleKeyboardLayouts.bundle"
+    "/Contents/Resources"
+    "/AppleKeyboardLayouts-L.dat"
+)
 
-parser = optparse.OptionParser(usage="Usage: %prog [options] DATFILE")
-parser.add_option("-o", "--output", dest="output",
-                  help="Output directory", metavar="OUTPUT")
+parser = optparse.OptionParser(
+    usage="Usage: %prog [options] DATFILE"
+)
+parser.add_option(
+    "-o", "--output", 
+    dest="output",
+    help="Output directory", 
+    metavar="OUTPUT"
+)
 
 (opts, args) = parser.parse_args()
 if not opts.output:
@@ -28,10 +39,7 @@ ICNS_HEADER = '\x69\x63\x6e\x73'
 
 
 def bufferToHex(buffer):
-    accumulator = ''
-    for i in range(len(buffer)):
-        accumulator += '%02x' % ord(buffer[i]) + ' '
-    return accumulator
+    return ''.join('%02x ' % ord(b) for b in buffer)
 
 
 def findNextIcon(data, pos):
