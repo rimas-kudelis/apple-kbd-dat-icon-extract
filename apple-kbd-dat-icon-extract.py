@@ -1,213 +1,27 @@
 #!/usr/bin/env python
 #
 # Copyright (C) 2012 Philip Belemezov <philip@belemezov.net>
+# Modifications by Chaim-Leib Halbert <chaim.leib.halbert@gmail.com>
 #
 # Public domain
 #
-
-
-import struct
 import optparse
 import sys
 import os
 
-class DataRecognizer(object):
-    header = 'start'
-    footer = 'end'
-    name = None
+from recognizers import ICNSRecognizer, LanguageRecognizer
 
 
-    recognizers = []
-
-
-    @classmethod
-    def isDataStart(cls, buf, pos):
-        raise NotImplemented
-
-    @classmethod
-    def findNextDataStart(cls, buf, pos):
-        raise NotImplemented
-
-    @classmethod
-    def findDataSize(cls, buf, pos):
-        raise NotImplemented
-
-    @classmethod
-    def findDataRange(cls, buf, pos):
-        raise NotImplemented
-
-    @classmethod
-    def findNextDataRange(cls, buf, pos):
-        raise NotImplemented
-
-
-class ICNSRecognizer(DataRecognizer):
-    header = 'icns'
-    footer = 'IEND\xae\x42\x60\x82'
-    name = 'ICNS'
-
-    @classmethod
-    def isDataStart(cls, buf, pos):
-        return buf.startswith(cls.header, pos)
-
-
-    @classmethod
-    def findNextDataStart(cls, buf, pos):
-        if pos >= len(buf):
-            return None
-        pos = buf.find(cls.header, pos)
-        return pos if pos != -1 else None
-
-
-    @classmethod
-    def findDataSize(cls, buf, pos):
-        origin = pos
-        assert cls.isDataStart(buf, origin)
-        pos += len(cls.header)
-        size = struct.unpack('>I', buf[pos:pos+4])[0]
-        assert origin + size < len(buf)
-        assert buf[origin + size - len(cls.footer):origin + size] == cls.footer
-        return size
-
-
-    @classmethod
-    def findDataRange(cls, buf, pos):
-        size = cls.findDataSize(buf, pos)
-        return (pos, size)
-
-
-    @classmethod
-    def findNextDataRange(cls, buf, pos):
-        origin = cls.findNextDataStart(buf, pos)
-        if origin is None:
-            return None
-        return cls.findDataRange(buf, origin)
-
-
-class LanguageRecognizer(DataRecognizer):
-    header = None
-    footer = None
-    name = 'LANG'
-
-    @classmethod
-    def isDataStart(cls, buf, pos):
-        return buf[pos].isalnum()
-
-
-    @classmethod
-    def findNextDataStart(cls, buf, pos):
-        if pos >= len(buf):
-            return None
-        while buf[pos] == '\x00':
-            pos += 1
-            if pos >= len(buf):
-                return None
-        if not cls.isDataStart(buf, pos):
-            return None
-        return pos
-
-
-    @classmethod
-    def readCString(cls, buf, pos):
-        origin = pos
-        pos = buf.find('\x00', origin)
-        if pos == -1:
-            return None
-        return buf[origin:pos]
-
-    @classmethod
-    def readData(cls, buf, pos):
-        origin = pos
-        assert cls.isDataStart(buf, origin)
-        
-        result = {'origin': origin}
-        
-        name = cls.readCString(buf, origin)
-        if name is None:
-            return None
-        result['name'] = name
-        result['size'] = size = len(name) + 1
-        pos += size
-        if pos >= len(buf):
-            return result
-        
-        pos = cls.findNextDataStart(buf, pos)
-        if pos is None:
-            return result
-        code = cls.readCString(buf, pos)
-        if code is None:
-            return result
-        
-        pos += len(code) + 1
-        
-        result['code'] = code
-        result['size'] = pos - origin
-        
-        return result
-
-
-    @classmethod
-    def findDataSize(cls, buf, pos):
-        assert cls.isDataStart(buf, pos)
-        origin = pos
-        pos = buf.find('\x00', pos)
-        if pos == -1:
-            return None
-        pos = cls.findNextDataStart(buf, pos)
-        if pos is None:
-            return None
-        pos = buf.find('\x00', pos)
-        if pos == -1:
-            return None
-        pos += 1
-        if pos >= len(buf):
-            return None
-        return pos - origin
-
-
-    @classmethod
-    def findDataRange(cls, buf, pos):
-        origin = pos
-        size = cls.findDataSize(buf, pos)
-        if size is None:
-            return None
-        return (origin, size)
-
-
-    @classmethod
-    def findNextDataRange(cls, buf, pos):
-        pos = cls.findNextDataStart(buf, pos)
-        if pos is None:
-            return None
-        r = cls.findDataRange(buf, pos)
-        if r is None:
-            return None
-        return r
-
-
-    @classmethod
-    def readNextData(cls, buf, pos):
-        pos = cls.findNextDataStart(buf, pos)
-        if pos is None:
-            return None
-        return cls.readData(buf, pos)
-
-
-def writeBuffer(filename, buf):
+def write_buffer(filename, buf):
     with open(filename, 'wb') as f:
         f.write(buf)
 
 
-# def bufferToHex(buffer):
-#     return ''.join('%02x ' % ord(b) for b in buffer)
-
-
-def extractData(buf):
+def extract_data(buf):
     origin = 0
-    pos = 0
     results = []
     while True:
-        r = ICNSRecognizer.findNextDataRange(buf, origin)
+        r = ICNSRecognizer.find_next_data_range(buf, origin)
         if r is None:
             break
         (pos, size) = r
@@ -216,18 +30,17 @@ def extractData(buf):
         origin = pos + size
     if origin < len(buf):
         results.append((None, buf[origin:len(buf)]))
-        
+
     # try to get labels for the parts
     temp = results
     results = []
-    for i, (type, data) in enumerate(temp):
-        if type == 'ICNS':
-            results.append((type, data))
+    for i, (kind, data) in enumerate(temp):
+        if kind == 'ICNS':
+            results.append((kind, data))
             continue
 
-        # elif type is None:
-        r = LanguageRecognizer.findNextDataRange(data, 0)
-        #print str(i) + ':' + repr(r)
+        # elif kind is None:
+        r = LanguageRecognizer.find_next_data_range(data, 0)
         if r is None:
             results.append((None, data))
             continue
@@ -240,64 +53,65 @@ def extractData(buf):
 
     return results
 
-def nameResults(results):
+
+def name_results(results):
     temp = results
-    numResults = len(temp)
-    maxDigits = len(str(numResults))
-    
+    results_count = len(temp)
+    max_digits = len(str(results_count))
+
     exts = {
         None: 'dat',
         'LANG': 'txt',
         'ICNS': 'icns',
     }
-    
-    defaultFmt = '{i}-{type}.{ext}'
-    
+
+    default_fmt = '{i}-{kind}.{ext}'
+
     results = []
     label = None
-    for i, (type, data) in enumerate(temp):
-        iStr = str(i).zfill(maxDigits)
-        
+    for i, (kind, data) in enumerate(temp):
+        istr = str(i).zfill(max_digits)
+
         filename = None  # gets set later
-        
-        if type == 'LANG':
-            label = LanguageRecognizer.readNextData(data, 0)
-            print '{iStr} {label}'.format(iStr=iStr, label=data)
-        elif type == 'ICNS' and label is not None:
-            filename = '{i}-{name} ({code}).icns'.format(i=iStr, **label)
+
+        if kind == 'LANG':
+            label = LanguageRecognizer.read_next_data(data, 0)
+            print '{istr} {label}'.format(istr=istr, label=data)
+        elif kind == 'ICNS' and label is not None:
+            filename = '{i}-{name} ({code}).icns'.format(i=istr, **label)
             label = None
-        
+
         if filename is None:
-            filename = defaultFmt.format(
-                i=iStr, 
-                type='UNKNOWN' if type is None else type, 
-                ext=exts[type]
+            filename = default_fmt.format(
+                i=istr,
+                kind='UNKNOWN' if kind is None else kind,
+                ext=exts[kind]
             )
-            
-        results.append((type, filename, data))
+
+        results.append((kind, filename, data))
     return results
 
 
-def writeData(items, outputDir, types=None):
+def write_data(items, output_dir, types=None):
     items = (
-        (filename, data) 
-        for (type, filename, data) in items 
-        if type in types
+        (filename, data)
+        for (kind, filename, data) in items
+        if kind in types
     ) if types is not None else (
         (filename, data)
-        for (type, filename, data) in items
+        for (kind, filename, data) in items
     )
-    
+
     for (filename, data) in items:
-        filename = outputDir + '/' + filename
+        filename = output_dir + '/' + filename
         print('Writing %s ...' % filename)
-        writeBuffer(filename, data)
+        write_buffer(filename, data)
 
 
-def parseArgs():
+def parse_args():
     prog = os.path.basename(sys.argv[0])
 
-    DEFAULT_DATFILE = (
+    layouts_path = (
         "/System/Library"
         "/Keyboard Layouts/AppleKeyboardLayouts.bundle"
         "/Contents/Resources"
@@ -305,7 +119,7 @@ def parseArgs():
     )
 
     parser = optparse.OptionParser(
-        usage="Usage: %prog [options] DATFILE"
+        usage="Usage: %s [options] DATFILE" % prog
     )
     parser.add_option(
         "-o", "--output",
@@ -318,40 +132,41 @@ def parseArgs():
     if not opts.output:
         parser.error("Please specify output dir using `-o'")
 
-    opts.filename = args[0] if args else DEFAULT_DATFILE
+    opts.filename = args[0] if args else layouts_path
 
     return opts
 
 
-def checkArgs(opts):
+def check_args(opts):
     if not os.path.exists(opts.output):
         print "Output directory %s doesn't exist, please create it first" \
-                % outputDir
+            % opts.output
         return 1
 
 
 def main():
-    opts = parseArgs()
-    error = checkArgs(opts)
+    opts = parse_args()
+    error = check_args(opts)
     if error:
         return error
 
     print "Reading %s" % opts.filename
-    data = None
+
     with open(opts.filename, "rb") as f:
         data = f.read()
-
-    items = extractData(data)
-    if not items:
+    if not data:
         return 1
-    
-    items = nameResults(items)
+
+    items = extract_data(data)
     if not items:
         return 1
 
-    writeData(items, opts.output)
+    items = name_results(items)
+    if not items:
+        return 1
+
+    write_data(items, opts.output)
     return 0
-    # return processIcons(data, outputDir=opts.output)
 
 
 if __name__ == "__main__":
