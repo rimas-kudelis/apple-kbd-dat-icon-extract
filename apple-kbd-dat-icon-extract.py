@@ -91,7 +91,7 @@ class LanguageRecognizer(DataRecognizer):
 
     @classmethod
     def isDataStart(cls, buf, pos):
-        return buf[pos].isalpha()
+        return buf[pos].isalnum()
 
 
     @classmethod
@@ -102,7 +102,7 @@ class LanguageRecognizer(DataRecognizer):
             pos += 1
             if pos >= len(buf):
                 return None
-        if not buf[pos].isalpha():
+        if not cls.isDataStart(buf, pos):
             return None
         return pos
 
@@ -119,27 +119,30 @@ class LanguageRecognizer(DataRecognizer):
     def readData(cls, buf, pos):
         origin = pos
         assert cls.isDataStart(buf, origin)
+        
+        result = {'origin': origin}
+        
         name = cls.readCString(buf, origin)
         if name is None:
             return None
-        pos += len(name) + 1
+        result['name'] = name
+        result['size'] = size = len(name) + 1
+        pos += size
         if pos >= len(buf):
-            return None
+            return result
+        
         pos = cls.findNextDataStart(buf, pos)
         if pos is None:
-            return None
+            return result
         code = cls.readCString(buf, pos)
-        if code is not None:
-            pos += len(code) + 1
-        if pos >= len(buf):
-            return None
-        result = {
-            'origin': origin,
-            'size': pos - origin,
-            'name': name,
-            'code': code,
-        }
-        print(result)
+        if code is None:
+            return result
+        
+        pos += len(code) + 1
+        
+        result['code'] = code
+        result['size'] = pos - origin
+        
         return result
 
 
@@ -208,12 +211,12 @@ def extractData(buf):
         if r is None:
             break
         (pos, size) = r
-        results.append(('UNKNOWN', buf[origin:pos]))
+        results.append((None, buf[origin:pos]))
         results.append(('ICNS', buf[pos:pos+size]))
         origin = pos + size
     if origin < len(buf):
-        results.append(('UNKNOWN', buf[origin:len(buf)]))
-
+        results.append((None, buf[origin:len(buf)]))
+        
     # try to get labels for the parts
     temp = results
     results = []
@@ -222,51 +225,71 @@ def extractData(buf):
             results.append((type, data))
             continue
 
-        # elif type == 'UNKNOWN':
+        # elif type is None:
         r = LanguageRecognizer.findNextDataRange(data, 0)
-        print str(i) + ':' + repr(r)
+        #print str(i) + ':' + repr(r)
         if r is None:
-            results.append(('UNKNOWN', data))
+            results.append((None, data))
             continue
         if r[0] != 0 and not all(b == '\x00' for b in data[0:r[0]]):
-            results.append(('UNKNOWN', data[0:r[0]]))
+            results.append((None, data[0:r[0]]))
         end = sum(r)
         results.append(('LANG', data[r[0]:end]))
         if end < len(data):
-            results.append(('UNKNOWN', data[end:]))
+            results.append((None, data[end:]))
 
     return results
 
-
-def writeAllData(items, outputDir):
-    total = len(items)
-    maxDigits = len(str(total))
-    filenameFormat = '{index:#0%d}-{type}.{ext}' % maxDigits
-
+def nameResults(results):
+    temp = results
+    numResults = len(temp)
+    maxDigits = len(str(numResults))
+    
     exts = {
-        'UNKNOWN': 'dat',
+        None: 'dat',
         'LANG': 'txt',
         'ICNS': 'icns',
     }
-
-    name = None
-    code = None
-    for index, (type, data) in enumerate(items):
+    
+    defaultFmt = '{i}-{type}.{ext}'
+    
+    results = []
+    label = None
+    for i, (type, data) in enumerate(temp):
+        iStr = str(i).zfill(maxDigits)
+        
+        filename = None  # gets set later
+        
         if type == 'LANG':
-            labelData = LanguageRecognizer.readNextData(data, 0)
-            if labelData:
-                name = labelData['name']
-                code = labelData['code']
-            else:
-                name = None
-                code = None
+            label = LanguageRecognizer.readNextData(data, 0)
+            print '{iStr} {label}'.format(iStr=iStr, label=data)
+        elif type == 'ICNS' and label is not None:
+            filename = '{i}-{name} ({code}).icns'.format(i=iStr, **label)
+            label = None
+        
+        if filename is None:
+            filename = defaultFmt.format(
+                i=iStr, 
+                type='UNKNOWN' if type is None else type, 
+                ext=exts[type]
+            )
+            
+        results.append((type, filename, data))
+    return results
 
-        filename = outputDir + '/' + filenameFormat.format(
-            index=index,
-            type=type if type == 'UNKNOWN' or not name else name + ' (' + code + ')' or type,
-            ext=exts[type],
-        )
 
+def writeData(items, outputDir, types=None):
+    items = (
+        (filename, data) 
+        for (type, filename, data) in items 
+        if type in types
+    ) if types is not None else (
+        (filename, data)
+        for (type, filename, data) in items
+    )
+    
+    for (filename, data) in items:
+        filename = outputDir + '/' + filename
         print('Writing %s ...' % filename)
         writeBuffer(filename, data)
 
@@ -321,8 +344,12 @@ def main():
     items = extractData(data)
     if not items:
         return 1
+    
+    items = nameResults(items)
+    if not items:
+        return 1
 
-    writeAllData(items, opts.output)
+    writeData(items, opts.output)
     return 0
     # return processIcons(data, outputDir=opts.output)
 
