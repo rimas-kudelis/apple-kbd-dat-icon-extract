@@ -4,7 +4,7 @@ from base import BaseRecognizer
 
 class ICNSRecognizer(BaseRecognizer):
     header = 'icns'
-    footer = 'IEND\xae\x42\x60\x82'
+    footer = 'IEND\xaeB\x60\x82'
     name = 'ICNS'
 
     @classmethod
@@ -24,8 +24,11 @@ class ICNSRecognizer(BaseRecognizer):
         assert cls.is_data_start(buf, origin)
         pos += len(cls.header)
         size = struct.unpack('>I', buf[pos:pos+4])[0]
+        #print "icns range: {} - {} (size: {})".format(*[origin, origin + size, size])
         assert origin + size < len(buf)
-        assert buf[origin + size - len(cls.footer):origin + size] == cls.footer
+        # Usually, the icon ends with cls.footer, but not always.
+        # Trust the offset we extracted instead.
+        #assert buf[origin + size - len(cls.footer):origin + size] == cls.footer
         return size
 
     @classmethod
