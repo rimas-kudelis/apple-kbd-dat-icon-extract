@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # Copyright (C) 2012 Philip Belemezov <philip@belemezov.net>
 # Modifications by Chaim-Leib Halbert <chaim.leib.halbert@gmail.com>
@@ -76,7 +76,7 @@ def name_results(results):
 
         if kind == 'LANG':
             label = LanguageRecognizer.read_next_data(data, 0)
-            print '{istr} {label}'.format(istr=istr, label=data)
+            print('{istr} {label}'.format(istr=istr, label=data))
         elif kind == 'ICNS' and label is not None:
             filename = '{i}-{name} ({code}).icns'.format(i=istr, **label)
             label = None
@@ -104,7 +104,7 @@ def write_data(items, output_dir, types=None):
 
     for (filename, data) in items:
         filename = output_dir + '/' + filename
-        print('Writing %s ...' % filename)
+        print(('Writing %s ...' % filename))
         write_buffer(filename, data)
 
 
@@ -139,8 +139,8 @@ def parse_args():
 
 def check_args(opts):
     if not os.path.exists(opts.output):
-        print "Output directory %s doesn't exist, please create it first" \
-            % opts.output
+        print("Output directory %s doesn't exist, please create it first" \
+            % opts.output)
         return 1
 
 
@@ -150,7 +150,7 @@ def main():
     if error:
         return error
 
-    print "Reading %s" % opts.filename
+    print("Reading %s" % opts.filename)
 
     with open(opts.filename, "rb") as f:
         data = f.read()

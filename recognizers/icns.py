@@ -1,5 +1,5 @@
 import struct
-from base import BaseRecognizer
+from .base import BaseRecognizer
 
 
 class ICNSRecognizer(BaseRecognizer):

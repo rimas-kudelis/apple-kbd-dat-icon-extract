@@ -1,2 +1,2 @@
-from icns import ICNSRecognizer
-from language import LanguageRecognizer
+from .icns import ICNSRecognizer
+from .language import LanguageRecognizer

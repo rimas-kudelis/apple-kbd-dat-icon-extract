@@ -1,4 +1,4 @@
-from base import BaseRecognizer
+from .base import BaseRecognizer
 
 
 class LanguageRecognizer(BaseRecognizer):
