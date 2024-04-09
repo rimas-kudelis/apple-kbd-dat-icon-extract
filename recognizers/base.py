@@ -1,6 +1,6 @@
 class BaseRecognizer(object):
-    header = 'start'
-    footer = 'end'
+    header = b'start'
+    footer = b'end'
     name = None
 
     recognizers = []

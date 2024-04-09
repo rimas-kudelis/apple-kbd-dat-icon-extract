@@ -3,8 +3,8 @@ from .base import BaseRecognizer
 
 
 class ICNSRecognizer(BaseRecognizer):
-    header = 'icns'
-    footer = 'IEND\xaeB\x60\x82'
+    header = b'icns'
+    footer = b'IEND\xaeB\x60\x82'
     name = 'ICNS'
 
     @classmethod

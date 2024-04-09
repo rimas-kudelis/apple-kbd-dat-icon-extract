@@ -8,13 +8,13 @@ class LanguageRecognizer(BaseRecognizer):
 
     @classmethod
     def is_data_start(cls, buf, pos):
-        return buf[pos].isalnum()
+        return ((buf[pos]>96 and buf[pos]<123) or (buf[pos]>64 and buf[pos]<91) or (buf[pos]>47 and buf[pos]<58))
 
     @classmethod
     def find_next_data_start(cls, buf, pos):
         if pos >= len(buf):
             return None
-        while buf[pos] == '\x00':
+        while buf[pos] == b'\x00':
             pos += 1
             if pos >= len(buf):
                 return None
@@ -25,7 +25,7 @@ class LanguageRecognizer(BaseRecognizer):
     @classmethod
     def read_cstring(cls, buf, pos):
         origin = pos
-        pos = buf.find('\x00', origin)
+        pos = buf.find(b'\x00', origin)
         if pos == -1:
             return None
         return buf[origin:pos]
@@ -64,13 +64,13 @@ class LanguageRecognizer(BaseRecognizer):
     def find_data_size(cls, buf, pos):
         assert cls.is_data_start(buf, pos)
         origin = pos
-        pos = buf.find('\x00', pos)
+        pos = buf.find(b'\x00', pos)
         if pos == -1:
             return None
         pos = cls.find_next_data_start(buf, pos)
         if pos is None:
             return None
-        pos = buf.find('\x00', pos)
+        pos = buf.find(b'\x00', pos)
         if pos == -1:
             return None
         pos += 1
